@@ -8,6 +8,21 @@ __pycache__/
 dist/
 build/
 .eggs/
+*.aux
+*.log
+*.out
+*.toc
+*.gz
+*.zip
+*.tar.gz
+*.whl
+*.env
+*.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
 
 # Jupyter
 .ipynb_checkpoints/
