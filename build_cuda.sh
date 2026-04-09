@@ -22,7 +22,7 @@ echo ""
 
 # Build forward kernel
 echo "Building forward kernel..."
-python setup_forward.py install
+python cuda/setup_forward.py install
 
 if [ $? -eq 0 ]; then
     echo "✓ Forward kernel built successfully"
@@ -35,12 +35,25 @@ echo ""
 
 # Build backward kernel
 echo "Building backward kernel..."
-python setup_backward.py install
+python cuda/setup_backward.py install
 
 if [ $? -eq 0 ]; then
     echo "✓ Backward kernel built successfully"
 else
     echo "✗ Backward kernel build failed"
+    exit 1
+fi
+
+echo ""
+
+# Build MIP splatting kernel
+echo "Building MIP splatting kernel..."
+python cuda/setup_mip.py install
+
+if [ $? -eq 0 ]; then
+    echo "✓ MIP splatting kernel built successfully"
+else
+    echo "✗ MIP splatting kernel build failed"
     exit 1
 fi
 

@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gaussian MIP Renderer</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000;color:#ddd;font-family:'SF Mono',Menlo,monospace;overflow:hidden}
+#c{display:block;width:100vw;height:100vh}
+#overlay{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;background:rgba(5,5,15,0.93);z-index:30}
+#overlay.hidden{display:none}
+#overlay h1{font-size:20px;font-weight:400;color:#88aaff;letter-spacing:.05em}
+#drop-box{border:2px dashed #334;border-radius:10px;padding:44px 72px;text-align:center;cursor:pointer;transition:border-color .2s,background .2s}
+#drop-box:hover,#drop-box.over{border-color:#88aaff;background:rgba(100,130,255,.05)}
+#drop-box p{color:#aaa;font-size:14px;line-height:2}
+#overlay code{font-size:11px;color:#556;background:#0e0e18;padding:6px 12px;border-radius:4px}
+#hud{position:fixed;top:14px;left:14px;display:none;flex-direction:column;gap:8px;z-index:10}
+.btn{background:rgba(10,10,28,.85);border:1px solid #334;border-radius:6px;color:#aaa;font:12px/1 'SF Mono',monospace;padding:7px 14px;cursor:pointer;transition:border-color .15s,color .15s}
+.btn:hover{border-color:#88aaff;color:#88aaff}
+#info{background:rgba(0,0,0,.6);border:1px solid #222;border-radius:5px;padding:8px 12px;font-size:11px;color:#556;line-height:1.8}
+#fps{position:fixed;top:14px;right:14px;background:rgba(0,0,0,.6);border:1px solid #222;border-radius:5px;padding:5px 12px;font-size:12px;color:#5f5;z-index:10;min-width:72px;text-align:right}
+</style>
+</head>
+<body>
+<div id="overlay">
+  <h1>Gaussian MIP Renderer</h1>
+  <div id="drop-box">
+    <p><strong style="color:#ccc">Drop .ply file here</strong></p>
+    <p>or click to browse</p>
+  </div>
+  <code>python export_ply.py model.pt model.ply</code>
+  <input id="fi" type="file" accept=".ply" style="display:none">
+</div>
+<canvas id="c"></canvas>
+<div id="hud">
+  <button class="btn" id="load-btn">📂 Load PLY</button>
+  <div id="info"></div>
+</div>
+<div id="fps">-- FPS</div>
+<input id="fi2" type="file" accept=".ply" style="display:none">
+<script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setSize(innerWidth, innerHeight);
+renderer.setClearColor(0x000000, 1);
+let W = innerWidth, H = innerHeight;
+
+const camera = new THREE.PerspectiveCamera(60, W/H, 1e-4, 1e4);
+camera.position.set(0,0,3);
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true; controls.dampingFactor = 0.06;
+controls.mouseButtons = { LEFT:THREE.MOUSE.ROTATE, MIDDLE:THREE.MOUSE.DOLLY, RIGHT:THREE.MOUSE.PAN };
+
+const VS = `#version 300 es
+precision highp float;
+uniform mat4 modelViewMatrix;
+uniform mat4 projectionMatrix;
+uniform vec2 uVP;
+in vec3 position;
+in vec3 aMean; in vec3 aScale; in vec4 aQuat; in float aIntensity;
+out vec2 vLocal; out float vIntensity; out vec4 vSigInv;
+mat3 q2r(vec4 q){
+  float w=q.x,x=q.y,y=q.z,z=q.w;
+  return mat3(1.-2.*(y*y+z*z),2.*(x*y+w*z),2.*(x*z-w*y),
+              2.*(x*y-w*z),1.-2.*(x*x+z*z),2.*(y*z+w*x),
+              2.*(x*z+w*y),2.*(y*z-w*x),1.-2.*(x*x+y*y));
+}
+void main(){
+  mat3 R=q2r(aQuat); vec3 s=aScale;
+  mat3 RS=mat3(R[0]*s.x,R[1]*s.y,R[2]*s.z);
+  mat3 S3=RS*transpose(RS);
+  vec4 mv=modelViewMatrix*vec4(aMean,1.); vec3 t=mv.xyz;
+  if(t.z>-0.001){gl_Position=vec4(10.,10.,10.,1.);return;}
+  float fx=projectionMatrix[0][0]*uVP.x*.5;
+  float fy=projectionMatrix[1][1]*uVP.y*.5;
+  float iz=1./t.z;
+  mat3 J=mat3(fx*iz,0.,0., 0.,fy*iz,0., -fx*t.x*iz*iz,-fy*t.y*iz*iz,0.);
+  mat3 JW=J*mat3(modelViewMatrix);
+  mat3 C3=JW*S3*transpose(JW);
+  float a=C3[0][0]+.3, b=C3[0][1], d=C3[1][1]+.3;
+  float tr=a+d, det=a*d-b*b;
+  float ev1=.5*tr+sqrt(max(.001,.25*tr*tr-det));
+  float rad=clamp(ceil(3.*sqrt(ev1)),1.,1024.);
+  float invD=1./max(det,1e-7);
+  vSigInv=vec4(d,-b,-b,a)*invD;
+  vec4 clip=projectionMatrix*mv;
+  vec2 ndc=clip.xy/clip.w;
+  vec2 off=position.xy*rad;
+  vLocal=off; vIntensity=aIntensity;
+  gl_Position=vec4(ndc+2.*off/uVP,clip.z/clip.w,1.);
+}`;
+
+const FS = `#version 300 es
+precision highp float;
+in vec2 vLocal; in float vIntensity; in vec4 vSigInv;
+out vec4 fragColor;
+vec3 fluor(float t){
+  vec3 c=mix(vec3(0.),vec3(.05,.9,.1),smoothstep(0.,.6,t));
+  return mix(c,vec3(1.),smoothstep(.6,1.,t));
+}
+void main(){
+  mat2 Si=mat2(vSigInv.x,vSigInv.y,vSigInv.z,vSigInv.w);
+  float d2=dot(vLocal,Si*vLocal);
+  if(d2>9.) discard;
+  float val=clamp(exp(-.5*d2)*vIntensity,0.,1.);
+  fragColor=vec4(fluor(val),1.);
+}`;
+
+const scene = new THREE.Scene();
+let mesh = null;
+
+function buildMesh({N,means,scales,quats,intensities}){
+  if(mesh){scene.remove(mesh);mesh.geometry.dispose();mesh.material.dispose();mesh=null;}
+  const geo = new THREE.InstancedBufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([-1,-1,0,1,-1,0,1,1,0,-1,1,0]),3));
+  geo.setIndex([0,1,2,0,2,3]);
+  geo.instanceCount = N;
+  geo.setAttribute('aMean',      new THREE.InstancedBufferAttribute(means,3));
+  geo.setAttribute('aScale',     new THREE.InstancedBufferAttribute(scales,3));
+  geo.setAttribute('aQuat',      new THREE.InstancedBufferAttribute(quats,4));
+  geo.setAttribute('aIntensity', new THREE.InstancedBufferAttribute(intensities,1));
+  const mat = new THREE.RawShaderMaterial({
+    glslVersion: THREE.GLSL3, vertexShader: VS, fragmentShader: FS,
+    blending: THREE.CustomBlending, blendEquation: THREE.MaxEquation,
+    blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor,
+    depthWrite: false, depthTest: false,
+    uniforms: { uVP: { value: new THREE.Vector2(W,H) } }
+  });
+  mesh = new THREE.Mesh(geo, mat);
+  mesh.frustumCulled = false;
+  scene.add(mesh);
+
+  let xMin=Infinity,xMax=-Infinity,yMin=Infinity,yMax=-Infinity,zMin=Infinity,zMax=-Infinity;
+  for(let i=0;i<N;i++){
+    const x=means[i*3],y=means[i*3+1],z=means[i*3+2];
+    if(x<xMin)xMin=x;if(x>xMax)xMax=x;if(y<yMin)yMin=y;if(y>yMax)yMax=y;if(z<zMin)zMin=z;if(z>zMax)zMax=z;
+  }
+  const cx=(xMin+xMax)/2,cy=(yMin+yMax)/2,cz=(zMin+zMax)/2;
+  const span=Math.max(xMax-xMin,yMax-yMin,zMax-zMin)||1;
+  controls.target.set(cx,cy,cz);
+  camera.position.set(cx,cy,cz+span*2.);
+  camera.near=span*.0001; camera.far=span*100;
+  camera.updateProjectionMatrix(); controls.update();
+  document.getElementById('info').innerHTML=
+    `<b style="color:#ccc">${N.toLocaleString()}</b> Gaussians<br>span ${span.toFixed(4)}<br>`+
+    `x [${xMin.toFixed(3)}, ${xMax.toFixed(3)}]<br>y [${yMin.toFixed(3)}, ${yMax.toFixed(3)}]<br>z [${zMin.toFixed(3)}, ${zMax.toFixed(3)}]`;
+  document.getElementById('hud').style.display='flex';
+}
+
+function parsePLY(buf){
+  const bytes=new Uint8Array(buf), MARK='end_header\n';
+  let hEnd=-1;
+  outer:for(let i=0;i<bytes.length-MARK.length;i++){
+    for(let j=0;j<MARK.length;j++) if(bytes[i+j]!==MARK.charCodeAt(j)) continue outer;
+    hEnd=i+MARK.length; break;
+  }
+  if(hEnd<0) throw new Error('PLY: end_header not found');
+  const lines=new TextDecoder('ascii').decode(bytes.slice(0,hEnd)).split('\n');
+  let N=0; const props=[];
+  for(const ln of lines){
+    const t=ln.trim().split(/\s+/);
+    if(t[0]==='element'&&t[1]==='vertex') N=parseInt(t[2]);
+    if(t[0]==='property'&&t[1]==='float') props.push(t[2]);
+  }
+  if(!N) throw new Error('PLY: no vertices');
+  const STRIDE=props.length, idx=k=>props.indexOf(k);
+  const PX=idx('x'),PY=idx('y'),PZ=idx('z');
+  const PS0=idx('scale_0'),PS1=idx('scale_1'),PS2=idx('scale_2');
+  const PR0=idx('rot_0'),PR1=idx('rot_1'),PR2=idx('rot_2'),PR3=idx('rot_3');
+  const PI=['intensity','f_dc_0','opacity'].reduce((a,k)=>a>=0?a:idx(k),-1);
+  for(const[name,i]of[['x',PX],['y',PY],['z',PZ],['scale_0',PS0],['scale_1',PS1],['scale_2',PS2],['rot_0',PR0],['rot_1',PR1],['rot_2',PR2],['rot_3',PR3]])
+    if(i<0) throw new Error(`PLY: missing "${name}"`);
+  const raw=hEnd%4===0?new Float32Array(buf,hEnd,N*STRIDE):new Float32Array(buf.slice(hEnd));
+  const means=new Float32Array(N*3),scales=new Float32Array(N*3),quats=new Float32Array(N*4),intensities=new Float32Array(N);
+  for(let i=0;i<N;i++){
+    const b=i*STRIDE;
+    means[i*3]=raw[b+PX];means[i*3+1]=raw[b+PY];means[i*3+2]=raw[b+PZ];
+    scales[i*3]=raw[b+PS0];scales[i*3+1]=raw[b+PS1];scales[i*3+2]=raw[b+PS2];
+    quats[i*4]=raw[b+PR0];quats[i*4+1]=raw[b+PR1];quats[i*4+2]=raw[b+PR2];quats[i*4+3]=raw[b+PR3];
+    intensities[i]=PI>=0?raw[b+PI]:1.;
+  }
+  return {N,means,scales,quats,intensities};
+}
+
+async function loadFile(file){
+  document.getElementById('overlay').classList.add('hidden');
+  document.getElementById('info').textContent='Parsing…';
+  document.getElementById('hud').style.display='flex';
+  try{ buildMesh(parsePLY(await file.arrayBuffer())); }
+  catch(e){ document.getElementById('info').textContent='⚠ '+e.message; console.error(e); }
+}
+
+const fi=document.getElementById('fi'),fi2=document.getElementById('fi2'),db=document.getElementById('drop-box');
+db.addEventListener('click',()=>fi.click());
+fi.addEventListener('change',e=>{if(e.target.files[0])loadFile(e.target.files[0]);});
+fi2.addEventListener('change',e=>{if(e.target.files[0])loadFile(e.target.files[0]);});
+document.getElementById('load-btn').addEventListener('click',()=>fi2.click());
+db.addEventListener('dragover',e=>{e.preventDefault();db.classList.add('over');});
+db.addEventListener('dragleave',()=>db.classList.remove('over'));
+db.addEventListener('drop',e=>{e.preventDefault();db.classList.remove('over');if(e.dataTransfer.files[0])loadFile(e.dataTransfer.files[0]);});
+
+window.addEventListener('resize',()=>{
+  W=innerWidth;H=innerHeight;
+  renderer.setSize(W,H);camera.aspect=W/H;camera.updateProjectionMatrix();
+  if(mesh)mesh.material.uniforms.uVP.value.set(W,H);
+});
+
+const fpsEl=document.getElementById('fps');
+let frames=0,t0=performance.now();
+(function loop(){
+  requestAnimationFrame(loop);
+  controls.update();
+  frames++;
+  const now=performance.now();
+  if(now-t0>=500){fpsEl.textContent=`${(frames/((now-t0)/1000)).toFixed(0)} FPS`;frames=0;t0=now;}
+  renderer.setClearColor(0x000000,1);
+  renderer.clear();
+  if(mesh)renderer.render(scene,camera);
+})();
+</script>
+</body>
+</html>

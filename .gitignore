@@ -50,6 +50,16 @@ temp.py
 temp.ipynb
 z/
 
+# Large / generated files
+*.ply
+*.splat
+*.rrd
+renderer/camera_positions.png
+
+# Node
+node_modules/
+package-lock.json
+
 # OS
 .DS_Store
 Thumbs.db
