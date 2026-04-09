@@ -1,5 +1,7 @@
 # MicroGMF-3D
 
+[![Live Demo](https://img.shields.io/badge/demo-live%20viewer-7fffb0?style=flat-square&logo=github)](https://asheibanifard.github.io/MicroGMF-3D/)
+
 **3D Gaussian Mixture Field for microscopy neuron volume reconstruction.**  
 Represents fluorescence microscopy volumes (TIFF stacks) as a set of anisotropic 3D Gaussians trained end-to-end with MIP splatting supervision.
 
@@ -7,7 +9,13 @@ Represents fluorescence microscopy volumes (TIFF stacks) as a set of anisotropic
 
 ## Demo
 
-### Interactive Real-Time Viewer
+### [▶ Live Interactive Demo](https://asheibanifard.github.io/MicroGMF-3D/)
+
+Runs entirely in the browser — no install, no server. WebGL MIP splatting renderer with real-time orbit, depth sorting, and splat-scale control.
+
+> Drag to orbit · Scroll to zoom · Right-drag to pan
+
+### Local Real-Time Viewer
 
 An HTTP-based viewer renders the Gaussian field from any camera angle in real time using [gsplat](https://github.com/nerfstudio-project/gsplat)'s CUDA rasterizer with MIP splatting (antialiased mode).
 

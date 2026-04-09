@@ -56,6 +56,9 @@ z/
 *.rrd
 renderer/camera_positions.png
 
+# Allow the GitHub Pages demo splat
+!docs/scene.splat
+
 # Node
 node_modules/
 package-lock.json
