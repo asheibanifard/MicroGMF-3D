@@ -452,32 +452,22 @@ function inv4(m, out) {
 // ── Shader source ─────────────────────────────────────────────
 const VS = `#version 300 es
 precision highp float;
-precision highp int;
 
-// Per-Gaussian attributes (via divisor=1)
-in vec3  a_pos;       // world position
-in vec3  a_scale;     // Gaussian scale (σ per axis)
-in vec4  a_color;     // rgba [0,1]
-in vec4  a_quat;      // quaternion wxyz (normalised)
-
-// Per-vertex (quad corners: -1,-1  1,-1  -1,1  1,1)
+in vec3  a_pos;
+in vec3  a_scale;
+in vec4  a_color;
+in vec4  a_quat;
 in vec2  a_quad;
 
 uniform mat4  u_proj;
 uniform mat4  u_view;
 uniform float u_splatScale;
 uniform float u_opacityBoost;
-uniform float u_mipWeight;
-uniform int   u_renderMode; // 0=alpha, 1=mip, 2=hybrid
 uniform vec3  u_tint;
 
-out vec2  v_uv;        // local coords in splat quad
+out vec2  v_uv;
 out vec4  v_color;
 out float v_alpha;
-out float v_amp;
-
-// For MIP mode the final per-pixel resolve is max blending in JS state.
-// Here we just emit per-splat intensity proxy (amp * gaussian) in fragment shader.
 
 mat3 quatToMat(vec4 q) {
   float w=q.x, x=q.y, y=q.z, z=q.w;
@@ -488,107 +478,64 @@ mat3 quatToMat(vec4 q) {
   );
 }
 
-// Project 3-D Gaussian covariance to 2-D screen covariance
-// Returns (A, B, C) of the 2×2 cov = [[A,B],[B,C]]
-vec3 computeCov2D(vec3 p_view, vec3 scale, vec4 quat,
-                  mat4 proj, float W, float H) {
+vec3 computeCov2D(vec3 pv, vec3 scale, vec4 quat, mat4 proj, float W, float H) {
   mat3 R  = quatToMat(quat);
-  mat3 S  = mat3(scale.x,0,0, 0,scale.y,0, 0,0,scale.z);
-  mat3 RS = R * S;
-  // 3-D covariance Σ = (RS)(RS)^T
-  mat3 Sigma3 = RS * transpose(RS);
-
+  mat3 RS = R * mat3(scale.x,0,0, 0,scale.y,0, 0,0,scale.z);
+  mat3 Sg = RS * transpose(RS);
   float fx = proj[0][0] * W * 0.5;
   float fy = proj[1][1] * H * 0.5;
-  float z  = p_view.z;
-
-  // Jacobian of perspective projection
-  mat3 J = mat3(
-    fx/z,  0.,        -fx*p_view.x/(z*z),
-    0.,    fy/z,      -fy*p_view.y/(z*z),
-    0.,    0.,        0.
-  );
-  mat3 W3 = mat3(u_view);
-  mat3 T  = J * W3;
-  mat3 cov2d = T * Sigma3 * transpose(T);
-  return vec3(cov2d[0][0], cov2d[0][1], cov2d[1][1]);
+  float z  = pv.z;
+  mat3 J = mat3(fx/z, 0., -fx*pv.x/(z*z),
+                0., fy/z, -fy*pv.y/(z*z),
+                0., 0.,    0.);
+  mat3 T = J * mat3(u_view);
+  mat3 c = T * Sg * transpose(T);
+  return vec3(c[0][0]+0.3, c[0][1], c[1][1]+0.3); // add 0.3px min filter
 }
 
 void main() {
   vec4 p_clip = u_proj * u_view * vec4(a_pos, 1.);
-  if (p_clip.w <= 0.) { gl_Position=vec4(0.,0.,2.,1.); return; }
-
-  vec3 p_view = (u_view * vec4(a_pos, 1.)).xyz;
-  if (p_view.z >= -0.1) { gl_Position=vec4(0.,0.,2.,1.); return; }
+  if (p_clip.w <= 0.0) { gl_Position = vec4(0,0,2,1); return; }
+  vec3 pv = (u_view * vec4(a_pos, 1.)).xyz;
+  if (pv.z >= -0.1) { gl_Position = vec4(0,0,2,1); return; }
 
   float W = float(${0});
   float H = float(${1});
 
-  // Lift placeholders at shader compile time via JS
-  // (actual values injected by recompile on resize)
+  vec3 cov = computeCov2D(pv, a_scale * u_splatScale, a_quat, u_proj, W, H);
 
-  vec3 cov = computeCov2D(p_view, a_scale * u_splatScale, a_quat, u_proj, W, H);
-
-  // Eigendecomposition of 2×2 symmetric
-  float a = cov.x, b_= cov.y, c = cov.z;
-  float mid  = 0.5*(a+c);
-  float diff = sqrt(max(0.0001, (a-c)*(a-c)*0.25 + b_*b_));
-  float lam1 = mid+diff, lam2 = mid-diff;
-  float r1 = sqrt(max(0., lam1));
-  float r2 = sqrt(max(0., lam2));
-
-  float theta = atan(b_, a - lam1);
+  float a_c = cov.x, b_ = cov.y, c_c = cov.z;
+  float mid  = 0.5*(a_c+c_c);
+  float diff = sqrt(max(0.001, (a_c-c_c)*(a_c-c_c)*0.25 + b_*b_));
+  float r1 = sqrt(max(0.0, mid+diff));
+  float r2 = sqrt(max(0.0, mid-diff));
+  float theta = atan(b_, a_c - (mid+diff));
   mat2 R2 = mat2(cos(theta), sin(theta), -sin(theta), cos(theta));
 
-  // Splat half-size (3σ cutoff in screen space)
-  vec2 half_size = 3.0 * vec2(r1, r2) / vec2(W, H) * 2.0;
-
-  vec2 screen_uv = (p_clip.xy / p_clip.w);
-  vec2 local = a_quad * vec2(r1, r2);
-  vec2 rotated = R2 * local;
-  vec2 clip_off = rotated / vec2(W, H) * 2.0;
+  vec2 screen_uv = p_clip.xy / p_clip.w;
+  vec2 clip_off  = R2 * (a_quad * vec2(r1, r2)) / vec2(W, H) * 2.0 * 3.0;
 
   gl_Position = vec4(screen_uv + clip_off, p_clip.z/p_clip.w, 1.0);
-
-  v_uv = a_quad;
-
-  float amp = a_color.a;
-  v_amp = amp;
-
-  // Hybrid keeps alpha compositing but brightens by mipWeight.
-  float hybridBoost = 1.0 + u_mipWeight * amp;
-  float modeBoost = (u_renderMode == 2) ? hybridBoost : 1.0;
-
-  v_color = vec4(a_color.rgb * u_tint * modeBoost, a_color.a);
-  v_alpha = min(1.0, a_color.a * u_opacityBoost * modeBoost);
+  v_uv   = a_quad;
+  v_color = vec4(a_color.rgb * u_tint, 1.0);
+  v_alpha = min(1.0, a_color.a * u_opacityBoost);
 }
 `;
 
 const FS = `#version 300 es
 precision highp float;
-precision highp int;
 
 in  vec2  v_uv;
 in  vec4  v_color;
 in  float v_alpha;
-in  float v_amp;
 
-uniform int u_renderMode; // 0=alpha, 1=mip, 2=hybrid
-out vec4  fragColor;
+out vec4 fragColor;
 
 void main() {
   float r2 = dot(v_uv, v_uv);
   if (r2 > 1.0) discard;
-  float g = exp(-3.0 * r2);
-
-  if (u_renderMode == 1) {
-    // True MIP splatting proxy: emit intensity and resolve with MAX blending.
-    float m = v_amp * g;
-    fragColor = vec4(v_color.rgb * m, m);
-  } else {
-    float alpha = v_alpha * g;
-    fragColor = vec4(v_color.rgb * alpha, alpha);
-  }
+  float alpha = v_alpha * exp(-3.0 * r2);
+  fragColor = vec4(v_color.rgb * alpha, alpha);
 }
 `;
 
@@ -612,16 +559,16 @@ function buildProgram(W, H) {
   gl.attachShader(p, makeShader(gl.VERTEX_SHADER,   vs));
   gl.attachShader(p, makeShader(gl.FRAGMENT_SHADER, FS));
   gl.linkProgram(p);
-  if (!gl.getProgramParameter(p, gl.LINK_STATUS))
-    console.error(gl.getProgramInfoLog(p));
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
+    console.error("Shader link error:", gl.getProgramInfoLog(p));
+    program = null; return;
+  }
   program  = p;
   uniforms = {
     proj:        gl.getUniformLocation(p, "u_proj"),
     view:        gl.getUniformLocation(p, "u_view"),
     splatScale:  gl.getUniformLocation(p, "u_splatScale"),
     opacityBoost:gl.getUniformLocation(p, "u_opacityBoost"),
-    mipWeight:   gl.getUniformLocation(p, "u_mipWeight"),
-    renderMode:  gl.getUniformLocation(p, "u_renderMode"),
     tint:        gl.getUniformLocation(p, "u_tint"),
   };
 }
@@ -828,13 +775,8 @@ function render(now) {
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
   gl.enable(gl.BLEND);
-  if (renderMode === 1) {
-    gl.blendEquation(gl.MAX);
-    gl.blendFunc(gl.ONE, gl.ONE);
-  } else {
-    gl.blendEquation(gl.FUNC_ADD);
-    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);   // premultiplied alpha
-  }
+  gl.blendEquationSeparate(gl.FUNC_ADD, gl.FUNC_ADD);
+  gl.blendFuncSeparate(gl.ONE, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
   gl.disable(gl.DEPTH_TEST);
 
   gl.useProgram(program);
@@ -842,8 +784,6 @@ function render(now) {
   gl.uniformMatrix4fv(uniforms.view,  false, viewMat);
   gl.uniform1f(uniforms.splatScale,   splatScale);
   gl.uniform1f(uniforms.opacityBoost, opacityBoost);
-  gl.uniform1f(uniforms.mipWeight,    mipWeight);
-  gl.uniform1i(uniforms.renderMode,   renderMode);
   gl.uniform3f(uniforms.tint,         ...tintColor);
 
   gl.bindVertexArray(vao);
