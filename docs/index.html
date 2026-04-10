@@ -1,819 +1,427 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MicroGMF — Interactive MIP Splat Viewer</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 10 10%27><circle cx=%275%27 cy=%275%27 r=%275%27 fill=%27%237fffb0%27/></svg>">
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    body {
-      background: #000;
-      color: #e0e0e0;
-      font-family: 'Segoe UI', system-ui, sans-serif;
-      overflow: hidden;
-      height: 100vh;
-      width: 100vw;
-    }
-
-    #canvas-container {
-      position: absolute;
-      inset: 0;
-    }
-
-    canvas {
-      display: block;
-      width: 100%;
-      height: 100%;
-    }
-
-    /* ── HUD ─────────────────────────────────────────────────── */
-    #hud {
-      position: absolute;
-      top: 14px;
-      left: 14px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      z-index: 10;
-      pointer-events: none;
-    }
-
-    .badge {
-      background: rgba(0,0,0,0.65);
-      backdrop-filter: blur(6px);
-      border: 1px solid rgba(255,255,255,0.12);
-      border-radius: 8px;
-      padding: 6px 12px;
-      font-size: 11px;
-      line-height: 1.6;
-      pointer-events: none;
-    }
-
-    .badge strong { color: #7fffb0; font-size: 13px; }
-    .badge .dim   { color: #888; }
-
-    /* ── Controls panel ──────────────────────────────────────── */
-    #panel {
-      position: absolute;
-      top: 14px;
-      right: 14px;
-      width: 240px;
-      background: rgba(0,0,0,0.72);
-      backdrop-filter: blur(8px);
-      border: 1px solid rgba(255,255,255,0.12);
-      border-radius: 10px;
-      padding: 14px;
-      z-index: 10;
-      font-size: 12px;
-    }
-
-    #panel h2 {
-      font-size: 13px;
-      font-weight: 600;
-      color: #7fffb0;
-      margin-bottom: 12px;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-    }
-
-    .ctrl-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 10px;
-    }
-
-    .ctrl-row label { color: #bbb; }
-
-    input[type=range] {
-      width: 110px;
-      accent-color: #7fffb0;
-    }
-
-    input[type=checkbox] { accent-color: #7fffb0; cursor: pointer; }
-
-    select {
-      background: #111;
-      color: #ddd;
-      border: 1px solid #444;
-      border-radius: 4px;
-      padding: 2px 4px;
-      font-size: 12px;
-      cursor: pointer;
-    }
-
-    .val-label { color: #7fffb0; min-width: 36px; text-align: right; }
-
-    .sep { border: none; border-top: 1px solid rgba(255,255,255,0.08); margin: 10px 0; }
-
-    #help {
-      position: absolute;
-      bottom: 14px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(0,0,0,0.55);
-      backdrop-filter: blur(4px);
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 6px;
-      padding: 6px 16px;
-      font-size: 11px;
-      color: #888;
-      white-space: nowrap;
-      z-index: 10;
-      pointer-events: none;
-    }
-
-    #status {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      color: #7fffb0;
-      font-size: 16px;
-      text-align: center;
-      z-index: 20;
-      pointer-events: none;
-    }
-
-    #status .sub { color: #555; font-size: 12px; margin-top: 6px; }
-  </style>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>MicroGMF — Interactive 3D Viewer</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><circle cx='5' cy='5' r='5' fill='%237fffb0'/></svg>">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#000;color:#ddd;font-family:system-ui,sans-serif;overflow:hidden;height:100vh;width:100vw}
+canvas{display:block;position:absolute;inset:0;width:100%;height:100%}
+#ui{position:absolute;top:10px;right:10px;background:rgba(0,0,0,.75);border:1px solid #333;
+    border-radius:8px;padding:12px;width:200px;font-size:12px;backdrop-filter:blur(4px)}
+#ui h3{color:#7fffb0;margin-bottom:8px;font-size:13px;letter-spacing:.04em;text-transform:uppercase}
+.row{display:flex;align-items:center;justify-content:space-between;margin:6px 0}
+.row label{color:#aaa;flex:0 0 80px}
+.row input[type=range]{flex:1;margin:0 6px;accent-color:#7fffb0}
+.row span{color:#7fffb0;min-width:34px;text-align:right}
+#info{position:absolute;top:10px;left:10px;background:rgba(0,0,0,.65);border:1px solid #222;
+      border-radius:6px;padding:8px 12px;font-size:12px;line-height:1.8}
+#info b{color:#7fffb0}
+#hint{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);
+      font-size:11px;color:#555;pointer-events:none;white-space:nowrap}
+</style>
 </head>
 <body>
+<canvas id="c"></canvas>
 
-<div id="canvas-container"><canvas id="c"></canvas></div>
+<div id="info">
+  <b>MicroGMF-3D</b><br>
+  C. elegans neural tissue<br>
+  <span id="nk">Loading…</span><br>
+  <span id="fps"></span>
+</div>
 
-<div id="hud">
-  <div class="badge">
-    <strong>MicroGMF</strong><br>
-    <span class="dim">C. elegans neural tissue</span><br>
-    <span class="dim">K = 6,899 Gaussians · 39.06 dB PSNR</span>
+<div id="ui">
+  <h3>Controls</h3>
+  <div class="row">
+    <label>Brightness</label>
+    <input type="range" id="bri" min="0.5" max="20" step="0.5" value="4">
+    <span id="bv">4.0</span>
   </div>
-  <div class="badge" id="stats">
-    <span class="dim" id="fps-label">FPS —</span><br>
-    <span class="dim" id="k-label">Sorting…</span>
+  <div class="row">
+    <label>Size</label>
+    <input type="range" id="sz" min="0.1" max="5" step="0.1" value="1">
+    <span id="sv">1.0</span>
   </div>
 </div>
 
-<div id="panel">
-  <h2>Render Controls</h2>
-
-  <div class="ctrl-row">
-    <label>Splat scale</label>
-    <input type="range" id="splat-scale" min="0.1" max="5" step="0.05" value="1.0">
-    <span class="val-label" id="splat-scale-val">1.0×</span>
-  </div>
-
-  <div class="ctrl-row">
-    <label>Opacity boost</label>
-    <input type="range" id="opacity" min="0.1" max="8" step="0.05" value="3.0">
-    <span class="val-label" id="opacity-val">3.0×</span>
-  </div>
-
-  <div class="ctrl-row">
-    <label>Render mode</label>
-    <select id="render-mode">
-      <option value="alpha">Alpha composite</option>
-      <option value="mip" selected>MIP (max)</option>
-      <option value="hybrid">Hybrid</option>
-    </select>
-  </div>
-
-  <div class="ctrl-row">
-    <label>MIP weight</label>
-    <input type="range" id="mip-weight" min="0" max="1" step="0.01" value="0.5">
-    <span class="val-label" id="mip-weight-val">0.50</span>
-  </div>
-
-  <hr class="sep">
-
-  <div class="ctrl-row">
-    <label>Background</label>
-    <select id="bg-select">
-      <option value="black">Black</option>
-      <option value="darkblue">Dark blue</option>
-      <option value="white">White</option>
-    </select>
-  </div>
-
-  <div class="ctrl-row">
-    <label>Tint</label>
-    <select id="tint-select">
-      <option value="green">Cyan-green</option>
-      <option value="magenta">Magenta</option>
-      <option value="cyan">Cyan</option>
-      <option value="white">White</option>
-    </select>
-  </div>
-
-  <hr class="sep">
-
-  <div class="ctrl-row">
-    <label>Sort freq.</label>
-    <select id="sort-freq">
-      <option value="1">Every frame</option>
-      <option value="3" selected>Every 3 frames</option>
-      <option value="6">Every 6 frames</option>
-    </select>
-  </div>
-
-  <div class="ctrl-row">
-    <label>Show axes</label>
-    <input type="checkbox" id="show-axes">
-  </div>
-
-  <hr class="sep">
-
-  <div class="ctrl-row">
-    <label>Reset camera</label>
-    <button id="reset-cam" style="
-      background:#1a1a1a; color:#7fffb0;
-      border:1px solid #444; border-radius:4px;
-      padding:3px 10px; font-size:11px; cursor:pointer;">
-      Reset
-    </button>
-  </div>
-</div>
-
-<div id="help">
-  Drag to orbit &nbsp;·&nbsp; Scroll to zoom &nbsp;·&nbsp; Right-drag / two-finger to pan
-</div>
-
-<div id="status">
-  <div id="status-text">Loading scene.splat…</div>
-  <div class="sub" id="status-sub"></div>
-</div>
+<div id="hint">Drag · Scroll · Right-drag to pan</div>
 
 <script>
-// ═══════════════════════════════════════════════════════════════
-//  Minimal WebGL 3-D Gaussian Splat renderer with MIP blending
-//  — no external dependencies, pure WebGL2
-// ═══════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────────────────
+// WebGL2 Gaussian Splat viewer — MIP (MAX blend) mode
+// No depth sorting required for MAX projection.
+// ─────────────────────────────────────────────────────────────────────────────
 
-const SPLAT_FILE = "scene.splat";
-const BYTES_PER_SPLAT = 32;
+const canvas = document.getElementById('c');
+const gl = canvas.getContext('webgl2', {antialias:false, alpha:false});
+if (!gl) { alert('WebGL2 required'); throw 0; }
 
-// ── Canvas setup ──────────────────────────────────────────────
-const canvas = document.getElementById("c");
-const gl = canvas.getContext("webgl2", {
-  antialias: false, premultipliedAlpha: false, alpha: false,
-});
-if (!gl) { alert("WebGL2 required."); throw new Error("No WebGL2"); }
+// ── Shaders ────────────────────────────────────────────────────────────────
+// The vertex shader projects each Gaussian's 3D covariance to a 2D screen
+// ellipse.  Each instance = one Gaussian, each vertex = one quad corner.
+// Render mode: MAX blending — no depth sort needed.
 
-// ── UI state ──────────────────────────────────────────────────
-let splatScale  = 1.0;
-let opacityBoost = 3.0;
-let mipWeight   = 0.5;
-let renderMode  = 1;  // 0=alpha, 1=mip, 2=hybrid
-let sortFreq    = 3;
-let showAxes    = false;
-let bgColor     = [0, 0, 0];
-let tintColor   = [0.2, 1.0, 0.5];   // cyan-green
-
-const tints = {
-  green:   [0.2, 1.0, 0.5],
-  magenta: [1.0, 0.2, 0.8],
-  cyan:    [0.1, 0.9, 1.0],
-  white:   [1.0, 1.0, 1.0],
-};
-
-const bgs = {
-  black:    [0, 0, 0],
-  darkblue: [0.01, 0.02, 0.06],
-  white:    [1, 1, 1],
-};
-
-// ── Camera state ──────────────────────────────────────────────
-let cam = {
-  theta: 1.5,       // azimuth (side view)
-  phi:   0.2,       // elevation
-  radius: 3.5,
-  panX: 0, panY: 0,
-  fovY: 60 * Math.PI / 180,
-};
-const CAM_INIT = { ...cam };
-
-// ── Mouse / touch ─────────────────────────────────────────────
-let drag = null;
-
-canvas.addEventListener("contextmenu", e => e.preventDefault());
-canvas.addEventListener("mousedown",  e => {
-  drag = { x: e.clientX, y: e.clientY, button: e.button,
-           theta: cam.theta, phi: cam.phi, panX: cam.panX, panY: cam.panY };
-});
-window.addEventListener("mouseup",   () => drag = null);
-window.addEventListener("mousemove", e => {
-  if (!drag) return;
-  const dx = (e.clientX - drag.x) / canvas.clientWidth;
-  const dy = (e.clientY - drag.y) / canvas.clientHeight;
-  if (drag.button === 0) {
-    cam.theta = drag.theta - dx * Math.PI * 2;
-    cam.phi   = Math.max(-Math.PI/2 + 0.05,
-                  Math.min(Math.PI/2 - 0.05, drag.phi + dy * Math.PI));
-  } else {
-    cam.panX = drag.panX - dx * cam.radius * 1.5;
-    cam.panY = drag.panY + dy * cam.radius * 1.5;
-  }
-});
-canvas.addEventListener("wheel", e => {
-  cam.radius *= (1 + e.deltaY * 0.001);
-  cam.radius  = Math.max(0.3, Math.min(20, cam.radius));
-  e.preventDefault();
-}, { passive: false });
-
-// Touch orbit
-let lastTouches = null;
-canvas.addEventListener("touchstart", e => {
-  lastTouches = [...e.touches];
-  drag = lastTouches.length === 1
-    ? { x: lastTouches[0].clientX, y: lastTouches[0].clientY,
-        button: 0, theta: cam.theta, phi: cam.phi,
-        panX: cam.panX, panY: cam.panY }
-    : null;
-});
-canvas.addEventListener("touchmove", e => {
-  e.preventDefault();
-  if (e.touches.length === 1 && drag) {
-    const dx = (e.touches[0].clientX - drag.x) / canvas.clientWidth;
-    const dy = (e.touches[0].clientY - drag.y) / canvas.clientHeight;
-    cam.theta = drag.theta - dx * Math.PI * 2;
-    cam.phi   = Math.max(-Math.PI/2+0.05,
-                  Math.min(Math.PI/2-0.05, drag.phi + dy * Math.PI));
-  } else if (e.touches.length === 2 && lastTouches.length >= 2) {
-    const d0 = dist2(lastTouches[0], lastTouches[1]);
-    const d1 = dist2(e.touches[0],   e.touches[1]);
-    cam.radius *= d0 / Math.max(d1, 1);
-    cam.radius  = Math.max(0.3, Math.min(20, cam.radius));
-  }
-  lastTouches = [...e.touches];
-}, { passive: false });
-canvas.addEventListener("touchend", () => { drag = null; lastTouches = null; });
-
-function dist2(a, b) {
-  return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
-}
-
-document.getElementById("reset-cam").onclick = () => Object.assign(cam, CAM_INIT);
-
-// ── UI bindings ───────────────────────────────────────────────
-function bindRange(id, valId, suffix, cb) {
-  const el = document.getElementById(id);
-  const vl = document.getElementById(valId);
-  el.oninput = () => { vl.textContent = parseFloat(el.value).toFixed(2) + (suffix||""); cb(parseFloat(el.value)); };
-}
-bindRange("splat-scale",  "splat-scale-val",  "×", v => splatScale   = v);
-bindRange("opacity",      "opacity-val",       "×", v => opacityBoost = v);
-bindRange("mip-weight",   "mip-weight-val",    "",  v => mipWeight    = v);
-
-document.getElementById("sort-freq").onchange  = e => sortFreq = parseInt(e.target.value);
-document.getElementById("show-axes").onchange  = e => showAxes = e.target.checked;
-document.getElementById("bg-select").onchange  = e => bgColor   = bgs[e.target.value]   || bgColor;
-document.getElementById("tint-select").onchange = e => tintColor = tints[e.target.value] || tintColor;
-document.getElementById("render-mode").onchange = e => {
-  if (e.target.value === "alpha") renderMode = 0;
-  else if (e.target.value === "mip") renderMode = 1;
-  else renderMode = 2;
-};
-
-// ── Math helpers ──────────────────────────────────────────────
-function mat4() { return new Float32Array(16); }
-function identity(m) {
-  m.fill(0);
-  m[0]=m[5]=m[10]=m[15]=1;
-  return m;
-}
-function perspective(fovY, aspect, near, far, m) {
-  const f = 1 / Math.tan(fovY / 2);
-  m.fill(0);
-  m[0]  = f / aspect;
-  m[5]  = f;
-  m[10] = (far + near) / (near - far);
-  m[11] = -1;
-  m[14] = 2 * far * near / (near - far);
-  return m;
-}
-function lookAt(eye, center, up, m) {
-  const fx = center[0]-eye[0], fy = center[1]-eye[1], fz = center[2]-eye[2];
-  const fl = Math.hypot(fx, fy, fz);
-  const fx_= fx/fl, fy_=fy/fl, fz_=fz/fl;
-  const sx = fy_*up[2]-fz_*up[1], sy = fz_*up[0]-fx_*up[2], sz = fx_*up[1]-fy_*up[0];
-  const sl = Math.hypot(sx,sy,sz);
-  const sx_=sx/sl, sy_=sy/sl, sz_=sz/sl;
-  const ux = sy_*fz_-sz_*fy_, uy = sz_*fx_-sx_*fz_, uz = sx_*fy_-sy_*fx_;
-  m[ 0]=sx_; m[ 1]=ux; m[ 2]=-fx_; m[ 3]=0;
-  m[ 4]=sy_; m[ 5]=uy; m[ 6]=-fy_; m[ 7]=0;
-  m[ 8]=sz_; m[ 9]=uz; m[10]=-fz_; m[11]=0;
-  m[12]=-(sx_*eye[0]+sy_*eye[1]+sz_*eye[2]);
-  m[13]=-(ux*eye[0]+uy*eye[1]+uz*eye[2]);
-  m[14]= (fx_*eye[0]+fy_*eye[1]+fz_*eye[2]);
-  m[15]=1;
-  return m;
-}
-function mul4(a, b, out) {
-  for (let r=0;r<4;r++) for (let c=0;c<4;c++) {
-    let s=0; for (let k=0;k<4;k++) s+=a[r+k*4]*b[k+c*4];
-    out[r+c*4]=s;
-  }
-  return out;
-}
-function inv4(m, out) {
-  // cofactor expansion
-  const [m00,m10,m20,m30,m01,m11,m21,m31,
-         m02,m12,m22,m32,m03,m13,m23,m33] = m;
-  const b00 = m00*m11-m10*m01, b01=m00*m21-m20*m01;
-  const b02 = m00*m31-m30*m01, b03=m10*m21-m20*m11;
-  const b04 = m10*m31-m30*m11, b05=m20*m31-m30*m21;
-  const b06 = m02*m13-m12*m03, b07=m02*m23-m22*m03;
-  const b08 = m02*m33-m32*m03, b09=m12*m23-m22*m13;
-  const b10 = m12*m33-m32*m13, b11=m22*m33-m32*m23;
-  const det = b00*b11-b01*b10+b02*b09+b03*b08-b04*b07+b05*b06;
-  if (!det) return identity(out);
-  const di = 1/det;
-  out[ 0]=(m11*b11-m21*b10+m31*b09)*di;
-  out[ 1]=(-m10*b11+m20*b10-m30*b09)*di;
-  out[ 2]=(m13*b05-m23*b04+m33*b03)*di;   // note: transposed
-  out[ 3]=(-m12*b05+m22*b04-m32*b03)*di;
-  out[ 4]=(-m01*b11+m21*b08-m31*b07)*di;
-  out[ 5]=(m00*b11-m20*b08+m30*b07)*di;
-  out[ 6]=(-m03*b05+m23*b02-m33*b01)*di;
-  out[ 7]=(m02*b05-m22*b02+m32*b01)*di;
-  out[ 8]=(m01*b10-m11*b08+m31*b06)*di;
-  out[ 9]=(-m00*b10+m10*b08-m30*b06)*di;
-  out[10]=(m03*b04-m13*b02+m33*b00)*di;
-  out[11]=(-m02*b04+m12*b02-m32*b00)*di;
-  out[12]=(-m01*b09+m11*b07-m21*b06)*di;
-  out[13]=(m00*b09-m10*b07+m20*b06)*di;
-  out[14]=(-m03*b03+m13*b01-m23*b00)*di;
-  out[15]=(m02*b03-m12*b01+m22*b00)*di;
-  return out;
-}
-
-// ── Shader source ─────────────────────────────────────────────
 const VS = `#version 300 es
 precision highp float;
 
-in vec3  a_pos;
-in vec3  a_scale;
-in vec4  a_color;
-in vec4  a_quat;
-in vec2  a_quad;
+in vec3 a_pos;    // Gaussian centre (world)
+in vec3 a_sc;     // Gaussian scale (σ per axis, world)
+in vec4 a_col;    // rgba [0,1]  (a = amplitude)
+in vec4 a_quat;   // quaternion wxyz
+in vec2 a_quad;   // quad corner ±1
 
-uniform mat4  u_proj;
 uniform mat4  u_view;
+uniform mat4  u_proj;
 uniform float u_splatScale;
-uniform float u_opacityBoost;
-uniform vec3  u_tint;
+uniform float u_brightness;
+uniform vec2  u_vp;          // viewport in pixels
 
 out vec2  v_uv;
-out vec4  v_color;
-out float v_alpha;
+out float v_val;
 
-mat3 quatToMat(vec4 q) {
-  float w=q.x, x=q.y, y=q.z, z=q.w;
+// Quaternion (wxyz) → rotation matrix
+mat3 q2r(vec4 q){
+  float w=q.x,x=q.y,y=q.z,z=q.w;
   return mat3(
     1.-2.*(y*y+z*z), 2.*(x*y+w*z),   2.*(x*z-w*y),
-    2.*(x*y-w*z),   1.-2.*(x*x+z*z), 2.*(y*z+w*x),
-    2.*(x*z+w*y),   2.*(y*z-w*x),   1.-2.*(x*x+y*y)
-  );
+    2.*(x*y-w*z),    1.-2.*(x*x+z*z), 2.*(y*z+w*x),
+    2.*(x*z+w*y),    2.*(y*z-w*x),    1.-2.*(x*x+y*y));
 }
 
-vec3 computeCov2D(vec3 pv, vec3 scale, vec4 quat, mat4 proj, float W, float H) {
-  mat3 R  = quatToMat(quat);
-  mat3 RS = R * mat3(scale.x,0,0, 0,scale.y,0, 0,0,scale.z);
-  mat3 Sg = RS * transpose(RS);
-  float fx = proj[0][0] * W * 0.5;
-  float fy = proj[1][1] * H * 0.5;
-  float z  = pv.z;
-  mat3 J = mat3(fx/z, 0., -fx*pv.x/(z*z),
-                0., fy/z, -fy*pv.y/(z*z),
-                0., 0.,    0.);
-  mat3 T = J * mat3(u_view);
-  mat3 c = T * Sg * transpose(T);
-  return vec3(c[0][0]+0.3, c[0][1], c[1][1]+0.3); // add 0.3px min filter
-}
+void main(){
+  // Camera-space position
+  vec4 pv4 = u_view * vec4(a_pos, 1.);
+  float z  = pv4.z;
+  if(z >= -0.1){ gl_Position=vec4(0,0,2,1); return; }
 
-void main() {
-  vec4 p_clip = u_proj * u_view * vec4(a_pos, 1.);
-  if (p_clip.w <= 0.0) { gl_Position = vec4(0,0,2,1); return; }
-  vec3 pv = (u_view * vec4(a_pos, 1.)).xyz;
-  if (pv.z >= -0.1) { gl_Position = vec4(0,0,2,1); return; }
+  // 3-D covariance  Σ = R S Sᵀ Rᵀ
+  float sc = u_splatScale;
+  mat3 R  = q2r(a_quat);
+  mat3 S  = mat3(a_sc.x*sc,0,0, 0,a_sc.y*sc,0, 0,0,a_sc.z*sc);
+  mat3 RS = R * S;
+  mat3 Sigma3 = RS * transpose(RS);
 
-  float W = float(${0});
-  float H = float(${1});
+  // Jacobian of perspective at p_view
+  float fx = u_proj[0][0] * u_vp.x * 0.5;
+  float fy = u_proj[1][1] * u_vp.y * 0.5;
+  float iz = 1.0/z;
+  mat3 J = mat3(
+    fx*iz,  0.,     -fx*pv4.x*iz*iz,
+    0.,     fy*iz,  -fy*pv4.y*iz*iz,
+    0.,     0.,      0.);
+  // Camera rotation (upper-left 3×3 of view matrix)
+  mat3 W3 = mat3(u_view);
+  mat3 T  = J * W3;
 
-  vec3 cov = computeCov2D(pv, a_scale * u_splatScale, a_quat, u_proj, W, H);
+  // 2-D projected covariance
+  mat3 cov = T * Sigma3 * transpose(T);
 
-  float a_c = cov.x, b_ = cov.y, c_c = cov.z;
-  float mid  = 0.5*(a_c+c_c);
-  float diff = sqrt(max(0.001, (a_c-c_c)*(a_c-c_c)*0.25 + b_*b_));
-  float r1 = sqrt(max(0.0, mid+diff));
-  float r2 = sqrt(max(0.0, mid-diff));
-  float theta = atan(b_, a_c - (mid+diff));
-  mat2 R2 = mat2(cos(theta), sin(theta), -sin(theta), cos(theta));
+  // Eigendecomposition of the 2×2 sub-matrix + 0.3-pixel min filter
+  float a = cov[0][0]+0.3, b = cov[0][1], c = cov[1][1]+0.3;
+  float mid  = 0.5*(a+c);
+  float disc = sqrt(max(1e-4, (a-c)*(a-c)*0.25 + b*b));
+  float r1   = sqrt(max(0., mid+disc));   // semi-axis 1 (pixels)
+  float r2   = sqrt(max(0., mid-disc));   // semi-axis 2 (pixels)
+  float ang  = atan(b, a-(mid+disc));
+  mat2  Rot2 = mat2(cos(ang),sin(ang),-sin(ang),cos(ang));
 
-  vec2 screen_uv = p_clip.xy / p_clip.w;
-  vec2 clip_off  = R2 * (a_quad * vec2(r1, r2)) / vec2(W, H) * 2.0 * 3.0;
+  // Quad corner in screen space (pixels from centre)
+  // 3σ cutoff so the whole meaningful Gaussian is inside the quad.
+  vec2 quadPx = 3.0 * Rot2 * (a_quad * vec2(r1, r2));
+  vec2 ndcOff = quadPx / u_vp * 2.0;
 
-  gl_Position = vec4(screen_uv + clip_off, p_clip.z/p_clip.w, 1.0);
-  v_uv   = a_quad;
-  v_color = vec4(a_color.rgb * u_tint, 1.0);
-  v_alpha = min(1.0, a_color.a * u_opacityBoost);
+  // Clip-space centre + pixel offset
+  vec4 clip = u_proj * pv4;
+  gl_Position = vec4(clip.xy/clip.w + ndcOff, clip.z/clip.w, 1.);
+
+  // Pass Gaussian amplitude to fragment
+  v_uv  = a_quad;               // ±1 quad coords
+  v_val = min(1.0, a_col.a * u_brightness);
 }
 `;
 
 const FS = `#version 300 es
 precision highp float;
-
 in  vec2  v_uv;
-in  vec4  v_color;
-in  float v_alpha;
+in  float v_val;
+out vec4  fragColor;
 
-out vec4 fragColor;
-
-void main() {
+void main(){
+  // Mahalanobis-like distance in the principal-axis UV frame.
+  // r2=0 at Gaussian centre, r2=1 at the 1-σ ellipse contour.
   float r2 = dot(v_uv, v_uv);
-  if (r2 > 1.0) discard;
-  float alpha = v_alpha * exp(-3.0 * r2);
-  fragColor = vec4(v_color.rgb * alpha, alpha);
+  if(r2 > 1.0) discard;      // clip beyond 1-σ (quad goes to 3-σ)
+  float g = exp(-3.0*r2);    // Gaussian weight, =1 at centre
+  float m = v_val * g;
+  // Fluorescence tint (cyan-green)
+  fragColor = vec4(0.2*m, 1.0*m, 0.5*m, m);
 }
 `;
 
-// ── Shader compilation ────────────────────────────────────────
-let program = null;
-let uniforms = {};
-
-function makeShader(type, src) {
-  const s = gl.createShader(type);
-  gl.shaderSource(s, src);
-  gl.compileShader(s);
-  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS))
-    console.error(gl.getShaderInfoLog(s));
+function mkShader(type, src){
+  const s=gl.createShader(type);
+  gl.shaderSource(s,src); gl.compileShader(s);
+  if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)){
+    console.error('Shader error:',gl.getShaderInfoLog(s)); throw 0;
+  }
   return s;
 }
-
-function buildProgram(W, H) {
-  if (program) gl.deleteProgram(program);
-  const vs = VS.replace("float(${0})", `float(${W})`).replace("float(${1})", `float(${H})`);
-  const p = gl.createProgram();
-  gl.attachShader(p, makeShader(gl.VERTEX_SHADER,   vs));
-  gl.attachShader(p, makeShader(gl.FRAGMENT_SHADER, FS));
-  gl.linkProgram(p);
-  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
-    console.error("Shader link error:", gl.getProgramInfoLog(p));
-    program = null; return;
-  }
-  program  = p;
-  uniforms = {
-    proj:        gl.getUniformLocation(p, "u_proj"),
-    view:        gl.getUniformLocation(p, "u_view"),
-    splatScale:  gl.getUniformLocation(p, "u_splatScale"),
-    opacityBoost:gl.getUniformLocation(p, "u_opacityBoost"),
-    tint:        gl.getUniformLocation(p, "u_tint"),
-  };
+const prog=gl.createProgram();
+gl.attachShader(prog, mkShader(gl.VERTEX_SHADER,   VS));
+gl.attachShader(prog, mkShader(gl.FRAGMENT_SHADER, FS));
+gl.linkProgram(prog);
+if(!gl.getProgramParameter(prog,gl.LINK_STATUS)){
+  console.error('Link error:',gl.getProgramInfoLog(prog)); throw 0;
 }
 
-// ── GPU buffers ───────────────────────────────────────────────
-let vao = null, quadBuf = null, gpuBuf = null, sortedBuf = null;
-let numSplats = 0;
+const L={
+  pos:    gl.getAttribLocation(prog,'a_pos'),
+  sc:     gl.getAttribLocation(prog,'a_sc'),
+  col:    gl.getAttribLocation(prog,'a_col'),
+  quat:   gl.getAttribLocation(prog,'a_quat'),
+  quad:   gl.getAttribLocation(prog,'a_quad'),
+  view:   gl.getUniformLocation(prog,'u_view'),
+  proj:   gl.getUniformLocation(prog,'u_proj'),
+  sScale: gl.getUniformLocation(prog,'u_splatScale'),
+  bri:    gl.getUniformLocation(prog,'u_brightness'),
+  vp:     gl.getUniformLocation(prog,'u_vp'),
+};
+console.log('Attribute locations:', L);
 
-// Per-splat float layout: pos(3) scale(3) rgba(4) quat(4) = 14 floats
-const FLOATS_PER_SPLAT = 14;
+// ── Quad corner buffer (shared, non-instanced) ─────────────────────────────
+const QUAD_VERTS = new Float32Array([-1,-1, 1,-1, -1,1, -1,1, 1,-1, 1,1]);
+const quadBuf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
+gl.bufferData(gl.ARRAY_BUFFER, QUAD_VERTS, gl.STATIC_DRAW);
 
-function buildBuffers(positions, scales, colors, quats) {
-  numSplats = positions.length / 3;
+// ── Per-Gaussian GPU buffers ───────────────────────────────────────────────
+let vao=null, nSplats=0;
 
-  // Interleaved per-splat data
-  const data = new Float32Array(numSplats * FLOATS_PER_SPLAT);
-  for (let i = 0; i < numSplats; i++) {
-    const o = i * FLOATS_PER_SPLAT;
-    data[o+0] = positions[i*3];   data[o+1] = positions[i*3+1]; data[o+2] = positions[i*3+2];
-    data[o+3] = scales[i*3];      data[o+4] = scales[i*3+1];    data[o+5] = scales[i*3+2];
-    data[o+6] = colors[i*4]/255;  data[o+7] = colors[i*4+1]/255;
-    data[o+8] = colors[i*4+2]/255;data[o+9] = colors[i*4+3]/255;
-    // quaternion wxyz from uint8
-    data[o+10] = quats[i*4]  /127.5-1;
-    data[o+11] = quats[i*4+1]/127.5-1;
-    data[o+12] = quats[i*4+2]/127.5-1;
-    data[o+13] = quats[i*4+3]/127.5-1;
-  }
-  gpuBuf = data;
-  sortedBuf = new Float32Array(numSplats * FLOATS_PER_SPLAT);
-
-  // Quad corners (two triangles)
-  const quad = new Float32Array([
-    -1,-1,  1,-1,  -1,1,
-    -1, 1,  1,-1,   1,1,
-  ]);
-  if (!quadBuf) quadBuf = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
-  gl.bufferData(gl.ARRAY_BUFFER, quad, gl.STATIC_DRAW);
-
-  if (!vao) vao = gl.createVertexArray();
-}
-
-function uploadSorted() {
-  if (!sortedBuf || !program) return;
-
-  gl.useProgram(program);
-  if (!vao) vao = gl.createVertexArray();
+function uploadSplats(pos, sc, col, quat){
+  nSplats = pos.length/3;
+  if(vao) gl.deleteVertexArray(vao);
+  vao = gl.createVertexArray();
   gl.bindVertexArray(vao);
 
-  // Quad buffer (attribute 0)
-  const aQuad = gl.getAttribLocation(program, "a_quad");
-  gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
-  gl.enableVertexAttribArray(aQuad);
-  gl.vertexAttribPointer(aQuad, 2, gl.FLOAT, false, 0, 0);
-  gl.vertexAttribDivisor(aQuad, 0);
-
-  // Per-splat buffer
-  if (!glSplatBuf) glSplatBuf = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, glSplatBuf);
-  gl.bufferData(gl.ARRAY_BUFFER, sortedBuf, gl.DYNAMIC_DRAW);
-
-  const stride = FLOATS_PER_SPLAT * 4;
-  function attr(name, size, offset) {
-    const loc = gl.getAttribLocation(program, name);
+  function instAttr(data, loc, size){
+    const buf=gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER,buf);
+    gl.bufferData(gl.ARRAY_BUFFER,data,gl.STATIC_DRAW);
     gl.enableVertexAttribArray(loc);
-    gl.vertexAttribPointer(loc, size, gl.FLOAT, false, stride, offset*4);
-    gl.vertexAttribDivisor(loc, 1);
+    gl.vertexAttribPointer(loc,size,gl.FLOAT,false,0,0);
+    gl.vertexAttribDivisor(loc,1);
   }
-  attr("a_pos",   3, 0);
-  attr("a_scale", 3, 3);
-  attr("a_color", 4, 6);
-  attr("a_quat",  4, 10);
+  instAttr(pos,  L.pos,  3);
+  instAttr(sc,   L.sc,   3);
+  instAttr(col,  L.col,  4);
+  instAttr(quat, L.quat, 4);
+
+  // Non-instanced quad corners
+  gl.bindBuffer(gl.ARRAY_BUFFER,quadBuf);
+  gl.enableVertexAttribArray(L.quad);
+  gl.vertexAttribPointer(L.quad,2,gl.FLOAT,false,0,0);
+  gl.vertexAttribDivisor(L.quad,0);
 
   gl.bindVertexArray(null);
+  console.log('Uploaded',nSplats,'Gaussians to GPU');
 }
 
-let glSplatBuf = null;
+// ── Parse .splat binary ────────────────────────────────────────────────────
+// Format: 32 bytes / Gaussian
+//   0-11 : pos   xyz    float32
+//  12-23 : scale xyz    float32
+//  24-27 : rgba         uint8
+//  28-31 : quat  wxyz   uint8 (decode: v/127.5 − 1)
+async function loadSplat(url){
+  const res=await fetch(url);
+  if(!res.ok) throw new Error('HTTP '+res.status);
+  const buf=await res.arrayBuffer();
+  const n  =(buf.byteLength/32)|0;
+  const dv =new DataView(buf);
 
-// ── Depth sort (JS, runs every sortFreq frames) ───────────────
-function sortSplats(viewMat) {
-  // View-space z = dot(view[2], pos) + view[14]
-  const vz0 = viewMat[2], vz1 = viewMat[6], vz2 = viewMat[10], vz3 = viewMat[14];
-  const depths = new Float32Array(numSplats);
-  for (let i = 0; i < numSplats; i++) {
-    const o = i * FLOATS_PER_SPLAT;
-    depths[i] = vz0*gpuBuf[o] + vz1*gpuBuf[o+1] + vz2*gpuBuf[o+2] + vz3;
+  const pos  =new Float32Array(n*3);
+  const sc   =new Float32Array(n*3);
+  const col  =new Float32Array(n*4);
+  const quat =new Float32Array(n*4);
+
+  let scMin=1e9, scMax=-1e9, aMin=1e9, aMax=-1e9;
+  for(let i=0;i<n;i++){
+    const b=i*32;
+    pos[i*3]  =dv.getFloat32(b,   true);
+    pos[i*3+1]=dv.getFloat32(b+4, true);
+    pos[i*3+2]=dv.getFloat32(b+8, true);
+    sc[i*3]   =dv.getFloat32(b+12,true);
+    sc[i*3+1] =dv.getFloat32(b+16,true);
+    sc[i*3+2] =dv.getFloat32(b+20,true);
+    col[i*4]  =dv.getUint8(b+24)/255;
+    col[i*4+1]=dv.getUint8(b+25)/255;
+    col[i*4+2]=dv.getUint8(b+26)/255;
+    col[i*4+3]=dv.getUint8(b+27)/255;
+    quat[i*4]  =dv.getUint8(b+28)/127.5-1;
+    quat[i*4+1]=dv.getUint8(b+29)/127.5-1;
+    quat[i*4+2]=dv.getUint8(b+30)/127.5-1;
+    quat[i*4+3]=dv.getUint8(b+31)/127.5-1;
+    const s=Math.max(sc[i*3],sc[i*3+1],sc[i*3+2]);
+    scMin=Math.min(scMin,s); scMax=Math.max(scMax,s);
+    const a=col[i*4+3];
+    aMin=Math.min(aMin,a); aMax=Math.max(aMax,a);
   }
+  console.log(`Loaded ${n} Gaussians`);
+  console.log(`  scale range: [${scMin.toFixed(5)}, ${scMax.toFixed(5)}]`);
+  console.log(`  alpha range: [${aMin.toFixed(3)}, ${aMax.toFixed(3)}]`);
+  console.log('  pos[0]:', pos[0].toFixed(3), pos[1].toFixed(3), pos[2].toFixed(3));
+  console.log('  scale[0]:', sc[0].toFixed(5), sc[1].toFixed(5), sc[2].toFixed(5));
+  return {n, pos, sc, col, quat};
+}
 
-  const order = Array.from({length: numSplats}, (_, i) => i);
-  order.sort((a, b) => depths[a] - depths[b]);   // front-to-back → render back-to-front
+// ── Camera ─────────────────────────────────────────────────────────────────
+const cam={theta:0.4, phi:0.3, r:3.5, px:0, py:0};
 
-  for (let j = 0; j < numSplats; j++) {
-    const src = order[j] * FLOATS_PER_SPLAT;
-    const dst = j        * FLOATS_PER_SPLAT;
-    sortedBuf.set(gpuBuf.subarray(src, src + FLOATS_PER_SPLAT), dst);
+function getView(){
+  const sp=Math.sin(cam.phi), cp=Math.cos(cam.phi);
+  const st=Math.sin(cam.theta), ct=Math.cos(cam.theta);
+  const ex=cam.px+cam.r*cp*st, ey=cam.py+cam.r*sp, ez=cam.r*cp*ct;
+  return lookAt([ex,ey,ez],[cam.px,cam.py,0],[0,1,0]);
+}
+
+function lookAt(eye,cen,up){
+  const [ex,ey,ez]=eye,[cx,cy,cz]=cen;
+  let fx=cx-ex,fy=cy-ey,fz=cz-ez;
+  const fl=Math.hypot(fx,fy,fz); fx/=fl;fy/=fl;fz/=fl;
+  let sx=fy*up[2]-fz*up[1],sy=fz*up[0]-fx*up[2],sz=fx*up[1]-fy*up[0];
+  const sl=Math.hypot(sx,sy,sz); sx/=sl;sy/=sl;sz/=sl;
+  const ux=sy*fz-sz*fy, uy=sz*fx-sx*fz, uz=sx*fy-sy*fx;
+  const m=new Float32Array(16);
+  m[0]=sx;m[1]=ux;m[2]=-fx;
+  m[4]=sy;m[5]=uy;m[6]=-fy;
+  m[8]=sz;m[9]=uz;m[10]=-fz;
+  m[12]=-(sx*ex+sy*ey+sz*ez);
+  m[13]=-(ux*ex+uy*ey+uz*ez);
+  m[14]= (fx*ex+fy*ey+fz*ez);
+  m[15]=1;
+  return m;
+}
+
+function perspective(fovY,asp,n,f){
+  const t=1/Math.tan(fovY/2), m=new Float32Array(16);
+  m[0]=t/asp;m[5]=t;m[10]=(f+n)/(n-f);m[11]=-1;m[14]=2*f*n/(n-f);
+  return m;
+}
+
+// ── Input ──────────────────────────────────────────────────────────────────
+let drag=null;
+canvas.addEventListener('mousedown',e=>{
+  drag={x:e.clientX,y:e.clientY,btn:e.button,cam:{...cam}};
+});
+window.addEventListener('mouseup',()=>drag=null);
+window.addEventListener('mousemove',e=>{
+  if(!drag) return;
+  const dx=(e.clientX-drag.x)/canvas.clientWidth;
+  const dy=(e.clientY-drag.y)/canvas.clientHeight;
+  if(drag.btn===0){
+    cam.theta=drag.cam.theta-dx*Math.PI*2;
+    cam.phi=Math.max(-1.4,Math.min(1.4,drag.cam.phi+dy*Math.PI));
+  } else {
+    cam.px=drag.cam.px-dx*cam.r*2;
+    cam.py=drag.cam.py+dy*cam.r*2;
   }
+});
+canvas.addEventListener('wheel',e=>{
+  cam.r=Math.max(0.3,Math.min(20,cam.r*(1+e.deltaY*0.001)));
+  e.preventDefault();
+},{passive:false});
+canvas.addEventListener('contextmenu',e=>e.preventDefault());
+
+let touches=null;
+canvas.addEventListener('touchstart',e=>{
+  touches=[...e.touches];
+  if(e.touches.length===1)
+    drag={x:touches[0].clientX,y:touches[0].clientY,btn:0,cam:{...cam}};
+});
+canvas.addEventListener('touchmove',e=>{
+  e.preventDefault();
+  if(e.touches.length===1&&drag){
+    const dx=(e.touches[0].clientX-drag.x)/canvas.clientWidth;
+    const dy=(e.touches[0].clientY-drag.y)/canvas.clientHeight;
+    cam.theta=drag.cam.theta-dx*Math.PI*2;
+    cam.phi=Math.max(-1.4,Math.min(1.4,drag.cam.phi+dy*Math.PI));
+  } else if(e.touches.length===2&&touches&&touches.length>=2){
+    const d0=Math.hypot(touches[0].clientX-touches[1].clientX,touches[0].clientY-touches[1].clientY);
+    const d1=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+    cam.r=Math.max(0.3,Math.min(20,cam.r*d0/Math.max(d1,1)));
+  }
+  touches=[...e.touches];
+},{passive:false});
+canvas.addEventListener('touchend',()=>{drag=null;touches=null;});
+
+// ── UI sliders ─────────────────────────────────────────────────────────────
+let brightness=4, splatScale=1;
+function slider(id,valId,cb){
+  const el=document.getElementById(id),sp=document.getElementById(valId);
+  sp.textContent=parseFloat(el.value).toFixed(1);
+  el.oninput=()=>{sp.textContent=parseFloat(el.value).toFixed(1);cb(parseFloat(el.value));};
 }
+slider('bri','bv',v=>brightness=v);
+slider('sz','sv',v=>splatScale=v);
 
-// ── Load .splat ───────────────────────────────────────────────
-function loadSplat(url, onProgress) {
-  return fetch(url).then(r => {
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const total = parseInt(r.headers.get("content-length") || "0");
-    const reader = r.body.getReader();
-    const chunks = [];
-    let received = 0;
-    return new ReadableStream({
-      start(ctrl) {
-        function push() {
-          reader.read().then(({done, value}) => {
-            if (done) { ctrl.close(); return; }
-            chunks.push(value);
-            received += value.byteLength;
-            onProgress(received, total);
-            push();
-          });
-        }
-        push();
-      }
-    });
-  }).then(s => new Response(s).arrayBuffer()).then(buf => {
-    const n = Math.floor(buf.byteLength / BYTES_PER_SPLAT);
-    const dv = new DataView(buf);
-    const pos    = new Float32Array(n * 3);
-    const scales = new Float32Array(n * 3);
-    const colors = new Uint8Array(n * 4);
-    const quats  = new Uint8Array(n * 4);
-    for (let i = 0; i < n; i++) {
-      const base = i * BYTES_PER_SPLAT;
-      pos[i*3]   = dv.getFloat32(base+0,  true);
-      pos[i*3+1] = dv.getFloat32(base+4,  true);
-      pos[i*3+2] = dv.getFloat32(base+8,  true);
-      scales[i*3]   = dv.getFloat32(base+12, true);
-      scales[i*3+1] = dv.getFloat32(base+16, true);
-      scales[i*3+2] = dv.getFloat32(base+20, true);
-      colors[i*4]   = dv.getUint8(base+24);
-      colors[i*4+1] = dv.getUint8(base+25);
-      colors[i*4+2] = dv.getUint8(base+26);
-      colors[i*4+3] = dv.getUint8(base+27);
-      quats[i*4]    = dv.getUint8(base+28);
-      quats[i*4+1]  = dv.getUint8(base+29);
-      quats[i*4+2]  = dv.getUint8(base+30);
-      quats[i*4+3]  = dv.getUint8(base+31);
-    }
-    return { n, pos, scales, colors, quats };
-  });
-}
+// ── Render loop ────────────────────────────────────────────────────────────
+let W=0,H=0;
+let fpsT=performance.now(),fpsN=0;
 
-// ── Resize ────────────────────────────────────────────────────
-let curW = 0, curH = 0;
-function resize() {
-  const W = canvas.clientWidth  * window.devicePixelRatio | 0;
-  const H = canvas.clientHeight * window.devicePixelRatio | 0;
-  if (W === curW && H === curH) return;
-  canvas.width = curW = W;
-  canvas.height = curH = H;
-  gl.viewport(0, 0, W, H);
-  buildProgram(W, H);
-  uploadSorted();
-}
-
-// ── Render loop ───────────────────────────────────────────────
-const projMat = mat4(), viewMat = mat4(), mvp = mat4(), invView = mat4();
-let frameCount = 0;
-let lastFpsTime = performance.now(), fpsCnt = 0;
-
-function getEye() {
-  const sp = Math.cos(cam.phi), cp = Math.cos(cam.theta), sp2 = Math.sin(cam.phi);
-  return [
-    cam.panX + cam.radius * sp * Math.sin(cam.theta),
-    cam.panY + cam.radius * sp2,
-    cam.radius * sp * cp,
-  ];
-}
-
-function render(now) {
+function render(now){
   requestAnimationFrame(render);
-  resize();
-  if (!program || numSplats === 0) return;
+  if(!nSplats) return;
 
-  // FPS
-  fpsCnt++;
-  if (now - lastFpsTime > 500) {
-    document.getElementById("fps-label").textContent =
-      `FPS ${(fpsCnt * 1000 / (now - lastFpsTime)).toFixed(0)}`;
-    fpsCnt = 0; lastFpsTime = now;
+  // Resize canvas to CSS size
+  const cw=canvas.clientWidth|0, ch=canvas.clientHeight|0;
+  if(cw!==W||ch!==H){
+    canvas.width=W=cw; canvas.height=H=ch;
+    gl.viewport(0,0,W,H);
+  }
+  if(!W||!H) return;
+
+  // FPS counter
+  fpsN++;
+  if(now-fpsT>600){
+    document.getElementById('fps').textContent=(fpsN*1000/(now-fpsT)).toFixed(0)+' FPS';
+    fpsN=0;fpsT=now;
   }
 
-  const W = curW, H = curH;
-  perspective(cam.fovY, W/H, 0.01, 50, projMat);
-  const eye    = getEye();
-  const center = [cam.panX, cam.panY, 0];
-  lookAt(eye, center, [0,1,0], viewMat);
-
-  // Sort
-  if (frameCount % sortFreq === 0) {
-    sortSplats(viewMat);
-    uploadSorted();
-  }
-  frameCount++;
-
-  gl.clearColor(...bgColor, 1);
-  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
+  // MAX blend — correct for MIP / fluorescence projection
+  gl.clearColor(0,0,0,1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
   gl.enable(gl.BLEND);
-  gl.blendEquationSeparate(gl.FUNC_ADD, gl.FUNC_ADD);
-  gl.blendFuncSeparate(gl.ONE, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-  gl.disable(gl.DEPTH_TEST);
+  gl.blendEquation(gl.MAX);
+  gl.blendFunc(gl.ONE,gl.ONE);
 
-  gl.useProgram(program);
-  gl.uniformMatrix4fv(uniforms.proj,  false, projMat);
-  gl.uniformMatrix4fv(uniforms.view,  false, viewMat);
-  gl.uniform1f(uniforms.splatScale,   splatScale);
-  gl.uniform1f(uniforms.opacityBoost, opacityBoost);
-  gl.uniform3f(uniforms.tint,         ...tintColor);
+  const view=getView();
+  const proj=perspective(Math.PI/3, W/H, 0.01, 100);
+
+  gl.useProgram(prog);
+  gl.uniformMatrix4fv(L.view,false,view);
+  gl.uniformMatrix4fv(L.proj,false,proj);
+  gl.uniform1f(L.sScale, splatScale);
+  gl.uniform1f(L.bri,    brightness);
+  gl.uniform2f(L.vp,     W, H);
 
   gl.bindVertexArray(vao);
-  gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, numSplats);
+  gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, nSplats);
   gl.bindVertexArray(null);
 
-  // Optional axes
-  if (showAxes) drawAxes(projMat, viewMat);
+  const err=gl.getError();
+  if(err) console.warn('WebGL error:',err);
 }
+requestAnimationFrame(render);
 
-// ── Simple axis lines (no extra shader needed — reuse splat program) ──
-function drawAxes(/*proj, view*/) { /* TODO: line primitive */ }
-
-// ── Boot ─────────────────────────────────────────────────────
-const statusEl  = document.getElementById("status-text");
-const statusSub = document.getElementById("status-sub");
-
-loadSplat(SPLAT_FILE, (recv, total) => {
-  const pct = total ? Math.round(recv / total * 100) : "?";
-  statusSub.textContent = `${(recv/1024).toFixed(0)} KB / ${(total/1024).toFixed(0)} KB`;
-}).then(({ n, pos, scales, colors, quats }) => {
-  document.getElementById("status").style.display = "none";
-  document.getElementById("k-label").textContent  = `K = ${n.toLocaleString()} Gaussians`;
-  buildBuffers(pos, scales, colors, quats);
-  resize();
-  uploadSorted();
-  requestAnimationFrame(render);
-}).catch(err => {
-  statusEl.textContent = "Error loading scene.splat";
-  statusSub.textContent = String(err);
+// ── Boot ───────────────────────────────────────────────────────────────────
+loadSplat('scene.splat').then(({n,pos,sc,col,quat})=>{
+  uploadSplats(pos,sc,col,quat);
+  document.getElementById('nk').textContent=`K = ${n.toLocaleString()} Gaussians`;
+}).catch(err=>{
+  document.getElementById('nk').textContent='Error: '+err.message;
   console.error(err);
 });
 </script>
